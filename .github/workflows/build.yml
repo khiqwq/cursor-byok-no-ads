@@ -1,0 +1,132 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-windows-amd64:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: '29.3'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enable Yarn Classic
+        shell: pwsh
+        run: corepack enable
+      - name: Install build tools
+        shell: pwsh
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@v3.44.1
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.1
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
+          "$env:USERPROFILE\go\bin" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: Build Windows amd64 package
+        shell: bash
+        run: task build
+      - name: Upload Windows amd64 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-byok-no-ads-windows-amd64
+          path: bin/windows-amd64.zip
+          if-no-files-found: error
+
+  build-linux-amd64:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Linux GUI dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config libgtk-3-dev libwebkit2gtk-4.1-dev
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: '29.3'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enable Yarn Classic
+        run: corepack enable
+      - name: Install build tools
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@v3.44.1
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.1
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Build Linux amd64 package
+        run: task build
+      - name: Upload Linux amd64 package
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-byok-no-ads-linux-amd64
+          path: bin/linux-amd64.tar.gz
+          if-no-files-found: error
+
+  build-macos:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15
+            arch: arm64
+            asset: macos-arm64.dmg
+          - runner: macos-15-intel
+            arch: amd64
+            asset: macos-amd64.dmg
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.25.x'
+          cache: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20.x'
+          cache: yarn
+          cache-dependency-path: frontend/yarn.lock
+      - uses: arduino/setup-protoc@v3
+        with:
+          version: '29.3'
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Enable Yarn Classic
+        run: corepack enable
+      - name: Install build tools
+        run: |
+          go install github.com/go-task/task/v3/cmd/task@v3.44.1
+          go install google.golang.org/protobuf/cmd/protoc-gen-go@v1.36.11
+          go install connectrpc.com/connect/cmd/protoc-gen-connect-go@v1.19.1
+          go install github.com/wailsapp/wails/v3/cmd/wails3@v3.0.0-alpha.74
+          echo "$(go env GOPATH)/bin" >> "$GITHUB_PATH"
+      - name: Build macOS package
+        run: task build
+      - name: Upload macOS package
+        uses: actions/upload-artifact@v4
+        with:
+          name: cursor-byok-no-ads-macos-${{ matrix.arch }}
+          path: bin/${{ matrix.asset }}
+          if-no-files-found: error
